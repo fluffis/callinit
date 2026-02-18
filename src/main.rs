@@ -30,12 +30,13 @@ struct MyApp {
     waiting_for_response: bool,
     auth_token: Option<String>,
     country_code: Option<String>,
+    notify_topic: Option<String>,
 }
 
 impl MyApp {
     fn new() -> Self {
         let (tx, rx) = mpsc::channel();
-        let (auth_token, country_code) = Self::read_config();
+        let (auth_token, country_code, notify_topic) = Self::read_config();
         let input_text = Self::check_clipboard_for_phone_number();
 
         Self {
@@ -46,6 +47,7 @@ impl MyApp {
             waiting_for_response: false,
             auth_token,
             country_code,
+            notify_topic,
         }
     }
 
@@ -75,12 +77,13 @@ impl MyApp {
         digit_count >= 6 && valid_chars
     }
 
-    fn read_config() -> (Option<String>, Option<String>) {
+    fn read_config() -> (Option<String>, Option<String>, Option<String>) {
         let filename = dirs::home_dir().unwrap().to_str().unwrap().to_owned() + "/.config/callinit.ini";
         let map = ini!(&filename);
         let auth_token = map["auth"]["token"].clone();
         let country_code = map["phone"]["country_code"].clone();
-        (auth_token, country_code)
+        let notify_topic = map["notify"]["topic"].clone();
+        (auth_token, country_code, notify_topic)
     }
 
     fn format_e164(&self, number: &str) -> String {
@@ -106,7 +109,8 @@ impl MyApp {
             }
 
             let auth_token = self.auth_token.clone();
-            
+            let notify_topic = self.notify_topic.clone();
+
             thread::spawn(move || {
                 let client = reqwest::blocking::Client::new();
                 let mut builder = client
@@ -121,7 +125,7 @@ impl MyApp {
                 }
 		let result = builder
                     .json(&serde_json::json!({
-                        "topic": "fluff-will-notify-you",
+                        "topic": notify_topic.unwrap_or_default(),
                         "message": text,
                         "actions": [
                            {
